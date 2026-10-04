@@ -1,23 +1,221 @@
-const samples=[{equation:'2x + 8 = 20',answer:'x = 6',detail:'One real solution.',steps:[['Subtract 8 from both sides','2x = 12','Keep both sides balanced.'],['Divide both sides by 2','x = 6','Isolate the unknown.']],check:['Substitute x = 6 into the original equation.','2(6) + 8 = 20','12 + 8 = 20 ✓']},{equation:'x² − 5x + 6 = 0',answer:'x = 2 or x = 3',detail:'Two real solutions.',steps:[['Find two numbers that multiply to 6 and add to −5','−2 and −3','These numbers give us the factors.'],['Factor the quadratic','(x − 2)(x − 3) = 0','Expand the brackets to recover the original equation.'],['Set each factor equal to zero','x = 2 or x = 3','A product is zero when at least one factor is zero.']],check:['Substitute each candidate into the original equation.','x = 2: 4 − 10 + 6 = 0 ✓','x = 3: 9 − 15 + 6 = 0 ✓']},{equation:'(x + 1) / 3 = 4',answer:'x = 11',detail:'One real solution. The denominator is a nonzero constant.',steps:[['Multiply both sides by 3','x + 1 = 12','Clear the denominator.'],['Subtract 1 from both sides','x = 11','Isolate the unknown.']],check:['Substitute x = 11 into the original equation.','(11 + 1) / 3 = 4','12 / 3 = 4 ✓']}];
-const $=id=>document.getElementById(id);let selected=1,current=null,objectUrl=null;const normal=s=>s.replaceAll('−','-').replaceAll('²','^2').replace(/\s/g,'').toLowerCase();
-function clearResult(){current=null;$('result').hidden=true;$('empty').hidden=false;$('message').textContent='';}
-function select(i){selected=i;clearResult();$('equation').value=samples[i].equation;$('sample-expression').textContent=samples[i].equation;$('sample-paper').hidden=false;$('upload-prompt').hidden=true;$('preview').hidden=true;document.querySelectorAll('[data-sample]').forEach(b=>b.classList.toggle('selected',Number(b.dataset.sample)===i));if(objectUrl){URL.revokeObjectURL(objectUrl);objectUrl=null}$('file').value='';}
-document.querySelectorAll('[data-sample]').forEach(b=>b.onclick=()=>select(Number(b.dataset.sample)));
-function upload(file){if(!file)return;if(!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>10*1024*1024){$('message').textContent='Please choose a JPG, PNG or WebP image under 10 MB.';return}clearResult();if(objectUrl)URL.revokeObjectURL(objectUrl);objectUrl=URL.createObjectURL(file);$('preview').src=objectUrl;$('preview').hidden=false;$('sample-paper').hidden=true;$('upload-prompt').hidden=true;$('equation').value='';document.querySelectorAll('[data-sample]').forEach(b=>b.classList.remove('selected'));$('message').textContent='Photo ready. Demo mode cannot read uploaded images. Type one of the sample equations to explore its solution, or choose a sample below.';}
-$('file').onchange=e=>upload(e.target.files[0]);$('drop').onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();$('file').click()}};['dragenter','dragover'].forEach(name=>$('drop').addEventListener(name,e=>{e.preventDefault();$('drop').classList.add('over')}));['dragleave','drop'].forEach(name=>$('drop').addEventListener(name,e=>{e.preventDefault();$('drop').classList.remove('over');if(name==='drop')upload(e.dataTransfer.files[0])}));$('equation').oninput=clearResult;
-function tab(name){$('steps').hidden=name!=='steps';$('check').hidden=name!=='check';document.querySelectorAll('[data-tab]').forEach(b=>b.classList.toggle('active',b.dataset.tab===name))}document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>tab(b.dataset.tab));
-$('solve').onclick=()=>{const s=samples.find(s=>normal(s.equation)===normal($('equation').value));if(!s){$('message').textContent=$('equation').value.trim()?'This equation is outside the three curated demos. Choose a sample to see a worked solution. Live solving needs an AI connection.':'Choose a sample or enter its equation first.';return}current=s;$('empty').hidden=true;$('result').hidden=false;$('message').textContent='';$('answer').textContent=s.answer;$('answer-detail').textContent=s.detail;$('steps').replaceChildren();s.steps.forEach((step,i)=>{const row=document.createElement('div');row.className='step';const num=document.createElement('span');num.textContent=i+1;const content=document.createElement('div');['h4','p','small'].forEach((tag,j)=>{const el=document.createElement(tag);el.textContent=step[j];content.append(el)});row.append(num,content);$('steps').append(row)});$('check').replaceChildren();s.check.forEach((text,i)=>{const p=document.createElement(i?'p':'div');p.textContent=text;$('check').append(p)});tab('steps')};
-$('copy').onclick=async()=>{if(!current)return;try{await navigator.clipboard.writeText([current.equation,current.answer,...current.steps.map(s=>s.join(': ')),...current.check,'Curated demo; no AI call made.'].join('\n'));$('copy').textContent='Copied ✓';setTimeout(()=>$('copy').textContent='Copy solution ↗',1800)}catch{$('message').textContent='Clipboard access is unavailable in this browser.'}};
+import { samples } from './samples.js';
 
-let imageInput=null,sampleMode=true,busy=false;
-function setBusy(value,message=''){busy=value;document.querySelectorAll('button,input').forEach(el=>el.disabled=value);$('message').textContent=message;}
-async function callApi(path,body){const response=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(200000)});const data=await response.json().catch(()=>({error:'Could not reach the AI service. Check your sign-in and connection.'}));if(!response.ok)throw new Error(data.error||'Request failed.');return data;}
-const demoSelect=select;select=i=>{if(busy)return;demoSelect(i);sampleMode=true;imageInput=null;$('read-image').hidden=true;$('image-url').value='';document.querySelector('.output-panel .pill').textContent='Sample solution';};
-const previewUpload=upload;upload=file=>{if(busy)return;previewUpload(file);if(!file||!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>10*1024*1024)return;imageInput=null;sampleMode=false;$('read-image').hidden=false;$('message').textContent='Photo ready. Select “Read equation from image” to transcribe it with AI.';const reader=new FileReader();reader.onload=()=>{imageInput=reader.result};reader.onerror=()=>{$('message').textContent='Could not read this file. Try another image.'};reader.readAsDataURL(file);};
-$('load-url').onclick=()=>{if(busy)return;let url;try{url=new URL($('image-url').value.trim());if(url.protocol!=='https:'||url.username||url.password||!url.hostname.includes('.')||/^[\d.]+$/.test(url.hostname)||url.hostname.includes('localhost'))throw Error()}catch{$('message').textContent='Enter a public HTTPS link pointing directly to an image.';return}clearResult();sampleMode=false;imageInput=url.href;$('equation').value='';$('preview').referrerPolicy='no-referrer';$('preview').src=imageInput;$('preview').hidden=false;$('sample-paper').hidden=true;$('upload-prompt').hidden=true;$('read-image').hidden=false;document.querySelectorAll('[data-sample]').forEach(b=>b.classList.remove('selected'));$('message').textContent='URL ready. Read the image to transcribe its equation.';};
-$('preview').onerror=()=>{$('message').textContent='Image preview unavailable. The link may require sign-in or may not point to an image. Try uploading the file instead.'};
-$('read-image').onclick=async()=>{if(busy)return;if(!imageInput){$('message').textContent='The image is still loading. Please try again.';return}clearResult();setBusy(true,'Reading your equation…');try{const data=await callApi('/api/read',{image:imageInput});$('equation').value=data.readable?data.equation:'';sampleMode=false;setBusy(false,data.readable?'Equation read. Review it before solving. '+data.notes:data.notes||'No clear equation found. Try a closer, sharper photo.');document.querySelector('.output-panel .pill').textContent='Live AI';}catch(e){setBusy(false,e.name==='TimeoutError'?'The image request timed out. Please try again.':e.message)}};
-$('equation').oninput=()=>{clearResult();sampleMode=false;document.querySelectorAll('[data-sample]').forEach(b=>b.classList.remove('selected'));};
-function renderLive(s){current={...s,steps:s.steps.map(step=>[step.title,step.expression,step.explanation])};$('empty').hidden=true;$('result').hidden=false;$('answer').textContent=s.answer;$('answer-detail').textContent=s.detail;$('steps').replaceChildren();current.steps.forEach((step,i)=>{const row=document.createElement('div');row.className='step';const num=document.createElement('span');num.textContent=i+1;const content=document.createElement('div');['h4','p','small'].forEach((tag,j)=>{const el=document.createElement(tag);el.textContent=step[j];content.append(el)});row.append(num,content);$('steps').append(row)});$('check').replaceChildren();[...s.check,'Separate model review: '+s.verification.notes].forEach((text,i)=>{const p=document.createElement(i?'p':'div');p.textContent=text;$('check').append(p)});document.querySelector('.output-panel .pill').textContent=s.verification.passed?'Model check passed':'Review needed';document.querySelector('.result-bottom>span').textContent='✧ AI-generated · verify important results';tab('steps');}
-const demoSolve=$('solve').onclick;$('solve').onclick=async()=>{if(busy)return;if(sampleMode){demoSolve();document.querySelector('.result-bottom>span').textContent='✧ Curated demo · no AI call made';return}const equation=$('equation').value.trim();if(!equation){$('message').textContent='Read your image or enter an equation first.';return}if(equation.length>1500){$('message').textContent='Use an equation under 1,500 characters.';return}clearResult();setBusy(true,'Solving and checking your equation…');try{const s=await callApi('/api/solve',{equation});renderLive(s);setBusy(false,s.verification.passed?'':s.verification.notes)}catch(e){setBusy(false,e.name==='TimeoutError'?'The solution request timed out. Please try again.':e.message)}};
-$('copy').onclick=async()=>{if(!current)return;try{await navigator.clipboard.writeText([current.equation,current.answer,...current.steps.map(s=>s.join(': ')),...current.check,sampleMode?'Curated demo; no AI call made.':'AI-generated; verify important results.'].join('\n'));$('copy').textContent='Copied ✓';setTimeout(()=>$('copy').textContent='Copy solution ↗',1800)}catch{$('message').textContent='Clipboard access is unavailable in this browser.'}};
+const element = (id) => document.getElementById(id);
+const sampleButtons = [...document.querySelectorAll('[data-sample]')];
+const resultBadge = document.querySelector('.output-panel .pill');
+const resultSource = document.querySelector('.result-bottom > span');
+const state = { image: null, imageVersion: 0, objectUrl: null, sample: samples[1], result: null, busy: false };
+
+function setMessage(message = '') {
+  element('message').textContent = message;
+}
+
+function clearResult() {
+  state.result = null;
+  element('result').hidden = true;
+  element('empty').hidden = false;
+  setMessage();
+}
+
+function setBusy(busy, message = '') {
+  state.busy = busy;
+  document.querySelectorAll('button, input').forEach((control) => { control.disabled = busy; });
+  setMessage(message);
+}
+
+function releasePreview() {
+  if (state.objectUrl) URL.revokeObjectURL(state.objectUrl);
+  state.objectUrl = null;
+}
+
+function clearSampleSelection() {
+  state.sample = null;
+  sampleButtons.forEach((button) => button.classList.remove('selected'));
+  resultBadge.textContent = 'Live AI';
+}
+
+function selectSample(index) {
+  if (state.busy) return;
+  clearResult();
+  releasePreview();
+  state.imageVersion += 1;
+  state.image = null;
+  state.sample = samples[index];
+  element('equation').value = state.sample.equation;
+  element('sample-expression').textContent = state.sample.equation;
+  element('sample-paper').hidden = false;
+  element('upload-prompt').hidden = true;
+  element('preview').hidden = true;
+  element('read-image').hidden = true;
+  element('file').value = '';
+  element('image-url').value = '';
+  resultBadge.textContent = 'Sample solution';
+  sampleButtons.forEach((button) => button.classList.toggle('selected', Number(button.dataset.sample) === index));
+}
+
+function showPreview(source) {
+  element('preview').src = source;
+  element('preview').hidden = false;
+  element('sample-paper').hidden = true;
+  element('upload-prompt').hidden = true;
+  element('read-image').hidden = false;
+  element('equation').value = '';
+}
+
+function uploadImage(file) {
+  if (state.busy || !file) return;
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 10 * 1024 * 1024) {
+    setMessage('Please choose a JPG, PNG or WebP image under 10 MB.');
+    return;
+  }
+  clearResult();
+  clearSampleSelection();
+  releasePreview();
+  const version = ++state.imageVersion;
+  state.image = null;
+  state.objectUrl = URL.createObjectURL(file);
+  showPreview(state.objectUrl);
+  element('image-url').value = '';
+  setMessage('Photo ready. Select “Read equation from image” to transcribe it with AI.');
+  const reader = new FileReader();
+  reader.onload = () => { if (version === state.imageVersion) state.image = reader.result; };
+  reader.onerror = () => { if (version === state.imageVersion) setMessage('Could not read this file. Try another image.'); };
+  reader.readAsDataURL(file);
+}
+
+function loadImageUrl() {
+  if (state.busy) return;
+  let url;
+  try {
+    url = new URL(element('image-url').value.trim());
+    if (url.protocol !== 'https:' || url.username || url.password || url.port || !url.hostname.includes('.') || /^[\d.]+$/.test(url.hostname) || url.hostname.includes('localhost')) throw new Error();
+  } catch {
+    setMessage('Enter a public HTTPS link pointing directly to an image.');
+    return;
+  }
+  clearResult();
+  clearSampleSelection();
+  releasePreview();
+  state.imageVersion += 1;
+  state.image = url.href;
+  element('preview').referrerPolicy = 'no-referrer';
+  showPreview(state.image);
+  setMessage('URL ready. Read the image to transcribe its equation.');
+}
+
+async function callApi(path, body) {
+  const response = await fetch(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(200000),
+  });
+  const data = await response.json().catch(() => ({ error: 'Could not reach the AI service. Check your sign-in and connection.' }));
+  if (!response.ok) throw new Error(data.error || 'Request failed.');
+  return data;
+}
+
+async function readImage() {
+  if (state.busy) return;
+  if (!state.image) { setMessage('The image is still loading. Please try again.'); return; }
+  clearResult();
+  setBusy(true, 'Reading your equation…');
+  try {
+    const data = await callApi('/api/read', { image: state.image });
+    element('equation').value = data.readable ? data.equation : '';
+    clearSampleSelection();
+    setBusy(false, data.readable ? `Equation read. Review it before solving. ${data.notes}` : data.notes || 'No clear equation found. Try a closer, sharper photo.');
+  } catch (error) {
+    setBusy(false, error.name === 'TimeoutError' ? 'The image request timed out. Please try again.' : error.message);
+  }
+}
+
+function selectTab(name) {
+  element('steps').hidden = name !== 'steps';
+  element('check').hidden = name !== 'check';
+  document.querySelectorAll('[data-tab]').forEach((button) => button.classList.toggle('active', button.dataset.tab === name));
+}
+
+function textNode(tag, text) {
+  const node = document.createElement(tag);
+  node.textContent = text;
+  return node;
+}
+
+function renderSolution(solution, isSample) {
+  state.result = { ...solution, isSample };
+  element('empty').hidden = true;
+  element('result').hidden = false;
+  element('answer').textContent = solution.answer;
+  element('answer-detail').textContent = solution.detail;
+  element('steps').replaceChildren();
+  solution.steps.forEach((step, index) => {
+    const row = document.createElement('div');
+    row.className = 'step';
+    const content = document.createElement('div');
+    ['h4', 'p', 'small'].forEach((tag, position) => content.append(textNode(tag, step[position])));
+    row.append(textNode('span', index + 1), content);
+    element('steps').append(row);
+  });
+  const checks = [...solution.check];
+  if (solution.verification) checks.push(`Separate model review: ${solution.verification.notes}`);
+  element('check').replaceChildren(...checks.map((text, index) => textNode(index ? 'p' : 'div', text)));
+  resultBadge.textContent = isSample ? 'Sample solution' : solution.verification.passed ? 'Model check passed' : 'Review needed';
+  resultSource.textContent = isSample ? '✧ Curated demo · no AI call made' : '✧ AI-generated · verify important results';
+  selectTab('steps');
+}
+
+async function solveEquation() {
+  if (state.busy) return;
+  if (state.sample) { renderSolution(state.sample, true); return; }
+  const equation = element('equation').value.trim();
+  if (!equation) { setMessage('Read your image or enter an equation first.'); return; }
+  if (equation.length > 1500) { setMessage('Use an equation under 1,500 characters.'); return; }
+  clearResult();
+  setBusy(true, 'Solving and checking your equation…');
+  try {
+    const solution = await callApi('/api/solve', { equation });
+    renderSolution({ ...solution, steps: solution.steps.map((step) => [step.title, step.expression, step.explanation]) }, false);
+    setBusy(false, solution.verification.passed ? '' : solution.verification.notes);
+  } catch (error) {
+    setBusy(false, error.name === 'TimeoutError' ? 'The solution request timed out. Please try again.' : error.message);
+  }
+}
+
+async function copySolution() {
+  const result = state.result;
+  if (!result) return;
+  const check = result.verification ? [`Separate model review: ${result.verification.notes}`] : [];
+  try {
+    await navigator.clipboard.writeText([
+      result.equation, result.answer,
+      ...result.steps.map((step) => step.join(': ')), ...result.check, ...check,
+      result.isSample ? 'Curated demo; no AI call made.' : 'AI-generated; verify important results.',
+    ].join('\n'));
+    element('copy').textContent = 'Copied ✓';
+    setTimeout(() => { element('copy').textContent = 'Copy solution ↗'; }, 1800);
+  } catch { setMessage('Clipboard access is unavailable in this browser.'); }
+}
+
+sampleButtons.forEach((button) => button.addEventListener('click', () => selectSample(Number(button.dataset.sample))));
+ document.querySelectorAll('[data-tab]').forEach((button) => button.addEventListener('click', () => selectTab(button.dataset.tab)));
+element('file').addEventListener('change', (event) => uploadImage(event.target.files[0]));
+element('load-url').addEventListener('click', loadImageUrl);
+element('read-image').addEventListener('click', readImage);
+element('solve').addEventListener('click', solveEquation);
+element('copy').addEventListener('click', copySolution);
+element('equation').addEventListener('input', () => { clearResult(); clearSampleSelection(); });
+element('preview').addEventListener('error', () => setMessage('Image preview unavailable. Try uploading the file instead of using a URL.'));
+element('drop').addEventListener('keydown', (event) => {
+  if (!state.busy && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); element('file').click(); }
+});
+['dragenter', 'dragover'].forEach((name) => element('drop').addEventListener(name, (event) => {
+  event.preventDefault();
+  if (!state.busy) element('drop').classList.add('over');
+}));
+['dragleave', 'drop'].forEach((name) => element('drop').addEventListener(name, (event) => {
+  event.preventDefault();
+  element('drop').classList.remove('over');
+  if (name === 'drop') uploadImage(event.dataTransfer.files[0]);
+}));
+window.addEventListener('pagehide', releasePreview);

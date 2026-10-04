@@ -32,6 +32,7 @@ Model checks can still make mistakes. Review the transcription, domain restricti
 | `web/index.html` | Website layout and content |
 | `web/style.css` | Responsive styling |
 | `web/app.js` | Image preview, sample demos, and live API interactions |
+| `web/samples.js` | Curated sample equations and solutions |
 | `worker/api.js` | Transcription, solving, model checking, and input validation |
 | `scripts/build-worker.mjs` | Embeds the website and API into a standalone Worker |
 | `scripts/check-worker.mjs` | Offline checks using mocked model responses |
@@ -39,7 +40,7 @@ Model checks can still make mistakes. Review the transcription, domain restricti
 | `.openai/hosting.json` | Existing Sites project identity and hosting configuration |
 | `dist/server/index.js` | Generated Worker; ignored by Git |
 
-The repository also contains the original Vinext starter files. The deployed app uses `web/` and `worker/`; the starter's `app/`, UI components, and npm framework scripts are not the active website build.
+The app uses plain HTML, CSS, JavaScript modules, and a dependency-free Worker. No frontend framework or package installation is required.
 
 ## Build and check
 
@@ -66,15 +67,15 @@ Set these environment values on the server hosting the Worker:
 
 For the hosted Sites deployment, configure the key as a runtime secret and deploy a saved version to apply it. Never place credentials in browser code or `.openai/hosting.json`.
 
-For the local live test, put `OPENAI_API_KEY` in an ignored `.env.local` file. The test reads that file explicitly; the Worker does not automatically load it.
+For the local live test, copy `.env.example` to `.env.local` and configure the key, or supply it through the environment. The test loads `.env.local`; the deployed Worker receives runtime bindings.
 
-`scripts/live-smoke.mjs` expects a PNG equation image at `/private/tmp/equation-smoke.png`. Provide that image, or update the script's image path for your environment, then run:
+`scripts/live-smoke.mjs` takes the path to a PNG equation image:
 
 ```sh
-node scripts/live-smoke.mjs
+node scripts/live-smoke.mjs /path/to/equation.png
 ```
 
-This test makes real API requests and incurs charges. It reads the image, solves the recognized equation, and reports whether the separate check passed. It currently uses the default model.
+This test makes real API requests and incurs charges. It reads the image, solves the recognized equation, and reports whether the separate check passed. It uses `OPENAI_MODEL` when configured, otherwise the default model.
 
 ## Deployment
 
