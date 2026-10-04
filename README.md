@@ -1,126 +1,107 @@
-# vinext-starter
+# Equation
 
-A clean full-stack starter running on [vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and Drizzle support.
+Read an equation from a photo, review its transcription, and get a step-by-step solution using a multimodal LLM.
 
-## Prerequisites
+[Open the website](https://paper-equation-lab.dgag0811.chatgpt.site/) · [GitHub repository](https://github.com/dgag0811/project-equation)
 
-- Node.js `>=22.13.0`
-- Portable: Windows, macOS, or Linux; no Bash required
-- Managed Linux: managed Linux runtime with Bash, `flock`, `curl`, `sha256sum`, and GNU `timeout`
-- Git is required only for publishing
+The hosted website is private and requires ChatGPT sign-in. The source repository is public.
 
-## Sites Lifecycle
+## Features
 
-The Sites initializer copies the shared starter and selects managed-linux only when `SITES_MANAGED_LINUX_CONTAINER=1`; otherwise it selects portable. It saves the selection only in ignored `.sites-runtime/execution-profile.json`. Both profiles copy/configure first, then use the plugin's separate `install-dependencies.mjs` step to measure installation independently. Edit source under `app/` and follow the Sites skill for installation, preview, builds, and publishing.
+- Upload a JPG, PNG, or WebP image up to 10 MB, or provide a public HTTPS image URL.
+- Read the equation with AI and review or edit it before solving.
+- Get a worked solution, assumptions, and substitution checks.
+- Run a separate model request to review the proposed solution.
+- Copy the solution or explore three curated sample equations without API calls.
 
-Run `node <plugin-root>/scripts/configure-execution-profile.mjs` only when the profile is unknown for the current checkout and environment. Profile changes do not alter tracked source or require reinstalling otherwise-valid dependencies; restart an existing preview to use the new selection. Do not commit or upload `.sites-runtime/`.
+## How it works
 
-This starter does not use `wrangler.jsonc`.
+1. **Capture:** Select an image or enter a direct image URL.
+2. **Read:** Click **Read equation from image**. The backend sends the image to the OpenAI Responses API and returns the equation and ambiguity notes.
+3. **Review:** Check the transcription and correct any symbols.
+4. **Solve:** Click **Show me the solution**. One request generates the solution; another checks it independently.
 
-`install:ci` runs `npm ci` once against the shared lockfile, disables parent-workspace discovery, and includes required dev/optional dependencies despite production/omit settings. Sharp defaults to prebuilt binaries unless explicitly configured otherwise. Do not overlap installers.
+A complete image-to-solution flow uses three model requests. Solving a typed equation uses two. Sample buttons use curated answers and make no API calls. The default model is `gpt-5.6-sol`; it can be changed with `OPENAI_MODEL`.
 
-- **Portable:** Preserve host HOME, npm cache, registry, proxy, temporary paths, retry/concurrency settings, and lifecycle-script policy. Use `--prefer-offline --no-audit --no-fund`.
-- **Managed Linux:** Use the existing project-local HOME/cache/tmp setup and Linux install lock, tarball preflight, and timeout. Restore the image-seeded npm cache only when its lockfile hash matches; retain network fallback. Builds keep their existing timeout. These helpers are not invoked by the portable profile.
+Model checks can still make mistakes. Review the transcription, domain restrictions, and answer before relying on a result.
 
-`scripts/sites-env.mjs` preserves the caller's HOME, npm cache, proxy, XDG, and temporary-directory configuration while defaulting Wrangler and Miniflare state to the checkout. If npm reports an unwritable cache, select a writable path with `npm_config_cache` for that install. The `dev` and `start` scripts also keep Wrangler logs inside the checkout. Generated `.sites-runtime/` and `.wrangler/` directories are disposable and ignored by Git.
+## Project structure
 
-On portable, `npm run dev` uses `vinext dev` with HMR, starting at port 5173. Vinext records the running server in ignored `.vinext/` state, rejects an ordinary duplicate launch, and recovers stale state after a stopped process; exactly simultaneous starts can race. Pass `--port <port>` or `--hostname <host>` after `npm run dev --` when needed; keep portable previews on loopback.
+| Path | Purpose |
+| --- | --- |
+| `web/index.html` | Website layout and content |
+| `web/style.css` | Responsive styling |
+| `web/app.js` | Image preview, sample demos, and live API interactions |
+| `worker/api.js` | Transcription, solving, model checking, and input validation |
+| `scripts/build-worker.mjs` | Embeds the website and API into a standalone Worker |
+| `scripts/check-worker.mjs` | Offline checks using mocked model responses |
+| `scripts/live-smoke.mjs` | Live image recognition and solution test |
+| `.openai/hosting.json` | Existing Sites project identity and hosting configuration |
+| `dist/server/index.js` | Generated Worker; ignored by Git |
 
-For browser QA on managed Linux, use `sites-preview start`. The project's dev script runs Vite and accepts the supervisor's `--host 0.0.0.0 --port 4173 --strictPort` arguments. The internal browser uses `http://terminal.local:4173/`; it is not a user-facing URL. The supervisor owns the preview lifecycle. The ignored local profile survives the supervisor's cleared process environment.
+The repository also contains the original Vinext starter files. The deployed app uses `web/` and `worker/`; the starter's `app/`, UI components, and npm framework scripts are not the active website build.
 
-The portable profile simulates ChatGPT sign-in only for loopback development requests. Visit `/signin-with-chatgpt?return_to=/` to sign in as `local_seedy` (`seedy@sites.test`, display name `Seedy`) and `/signout-with-chatgpt?return_to=/` to sign out. The development cookie preserves that identity across server restarts. Mock auth is disabled in the managed-linux profile and is not included in production builds; hosted authentication remains dispatch-owned.
+## Build and check
 
-The Worker uses `vinext/server/fetch-handler`, including Vinext's config-aware image handling. After building, `npm start` runs that Worker locally through Wrangler on `127.0.0.1`, sharing `.wrangler/state` with dev preview and local D1 migrations; it does not deploy the site or simulate sign-in. Use the URL printed by the server. Pass `npm start -- --port <port>` to select a different built-preview port.
-
-Local previews use Miniflare's placeholder `Request.cf` metadata without a network lookup. Set `CLOUDFLARE_CF_FETCH_ENABLED=true` to opt into fetching preview metadata; this setting does not change hosted request metadata.
-
-Local tool usage metrics are disabled by default. Set `WRANGLER_SEND_METRICS=true` to opt in.
-
-## Included Shape
-
-- edit site code under `app/`
-- `app/chatgpt-auth.ts` provides optional dispatch-owned ChatGPT sign-in helpers
-- `.openai/hosting.json` declares optional Sites D1 and R2 bindings
-- `vite.config.ts` simulates declared bindings for local development
-- `db/index.ts` reads the D1 binding from the Cloudflare Worker environment
-- `db/schema.ts` starts intentionally empty
-- `@cloudflare/workers-types` provides Worker types; `cloudflare-env.d.ts` declares optional `DB`/`BUCKET` bindings—update these declarations if binding names change
-- `examples/d1/` contains an optional D1 example surface
-- `drizzle.config.ts` supports local migration generation when needed
-
-## Workspace Auth Headers
-
-Signed-in visitors receive both `oai-authenticated-user-id` and `oai-authenticated-user-email`. Private Sites require every visitor to sign in; public Sites may also have anonymous visitors, for whom neither header is present.
-
-The user ID is stable for the same user on the same Site and different across Sites. Use it as the durable user key; use email and name for display or contact purposes.
-
-SIWC-authenticated workspace sites may also receive `oai-authenticated-user-full-name` when the user's SIWC profile has a non-empty `name` claim. The full-name value is percent-encoded UTF-8 and is accompanied by `oai-authenticated-user-full-name-encoding: percent-encoded-utf-8`.
-
-Treat the full name as optional and fall back to email when it is absent:
-
-```tsx
-import { headers } from "next/headers";
-
-export default async function Home() {
-  const requestHeaders = await headers();
-  const userId = requestHeaders.get("oai-authenticated-user-id");
-  const email = requestHeaders.get("oai-authenticated-user-email");
-  const encodedFullName = requestHeaders.get("oai-authenticated-user-full-name");
-  const fullName =
-    encodedFullName &&
-    requestHeaders.get("oai-authenticated-user-full-name-encoding") ===
-      "percent-encoded-utf-8"
-      ? decodeURIComponent(encodedFullName)
-      : null;
-
-  const displayName = fullName ?? email;
-  // ...
-}
-```
-
-## Optional Dispatch-Owned ChatGPT Sign-In
-
-Import the ready-to-use helpers from `app/chatgpt-auth.ts` when the site needs optional or required ChatGPT sign-in:
-
-- Use `getChatGPTUser()` for optional signed-in UI.
-- Use the returned `userId` as the stable user key for user-owned records; do not use email as a durable identifier.
-- Use `requireChatGPTUser(returnTo)` for server-rendered pages that should send anonymous visitors through Sign in with ChatGPT.
-- In a Server Component, start sign-in with `<a href={chatGPTSignInPath(returnTo)} target="_top">`. The auth helper module is server-only; do not import it into a Client Component.
-- Do not use `fetch`, XHR, a client-side router, or a framework link that can prefetch the sign-in route. SIWC must start as a top-level navigation.
-- Never request the AuthAPI authorization endpoint directly. The dispatch-owned `/signin-with-chatgpt` route must start the SIWC flow.
-- Use `chatGPTSignOutPath(returnTo)` for browser sign-out links or actions.
-- Pass a same-origin relative `returnTo` path for the destination after sign-in or sign-out. The helper validates and safely encodes it.
-- Mark protected pages with `export const dynamic = "force-dynamic"` because they depend on per-request identity headers.
-
-Dispatch owns `/signin-with-chatgpt`, `/signout-with-chatgpt`, `/callback`, the OAuth cookies, and identity header injection. Do not implement app routes for those reserved paths. Routes that do not import and call the helper remain anonymous-compatible.
-
-SIWC establishes identity only; it does not prove workspace membership. Use the Sites hosting platform's access policy controls for workspace-wide restrictions, or enforce explicit server-side membership or allowlist checks.
-
-Use SIWC for account pages, user-specific dashboards, saved records, and write actions tied to the current ChatGPT user. Leave public content anonymous.
-
-## Local D1 migrations
-
-For a D1-backed local preview, generate SQL with `npm run db:generate`. Build once through the Sites skill's build entrypoint (or `npm run build` for standalone use) to generate `dist/server/wrangler.json`, rebuilding if bindings change. From the project root, apply each pending migration in order:
+Use Node.js **22.13.0 or later**. The active Worker build and offline checks use Node built-ins and do not require `npm install`.
 
 ```sh
-node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file drizzle/0000_example.sql
+git clone https://github.com/dgag0811/project-equation.git
+cd project-equation
+node scripts/build-worker.mjs
+node scripts/check-worker.mjs
+node --check web/app.js
 ```
 
-Replace the filename with the pending migration and `DB` with your D1 binding name if different. Use `.wrangler/state`, not `.wrangler/state/v3`; Wrangler adds the versioned directories. Do not replay migrations already applied locally. This updates only the preview database; publishing applies production migrations separately.
+Run the build before the checks: the checks inspect the generated Worker as well as the API logic. They cover image URL validation, request validation, transcription, solving, the separate check, and embedded asset responses. They do not call OpenAI or incur API charges.
 
-## Diagnostic Commands
+## Configure live AI
 
-- `npm run install:ci`: perform the one locked dependency install
-- `npm run dev`: start the Vite/Vinext development server
-- `npm run build`: build the deployable Sites artifact
-- `npm run start`: preview the built Worker locally with D1/R2 support
-- `npm run db:generate`: generate Drizzle migrations after schema changes
+Set these environment values on the server hosting the Worker:
 
-When using the Sites plugin, follow its skill instructions for installation, builds, and publishing. These npm commands remain available for standalone use.
+| Variable | Purpose |
+| --- | --- |
+| `OPENAI_API_KEY` | Required secret for OpenAI requests |
+| `OPENAI_MODEL` | Optional model override; defaults to `gpt-5.6-sol` |
 
-The portable build runs Vinext directly without a host `timeout` command. The managed-linux build uses `scripts/build-verified.sh` and its existing `SITES_BUILD_TIMEOUT` setting.
+For the hosted Sites deployment, configure the key as a runtime secret and deploy a saved version to apply it. Never place credentials in browser code or `.openai/hosting.json`.
 
-## Learn More
+For the local live test, put `OPENAI_API_KEY` in an ignored `.env.local` file. The test reads that file explicitly; the Worker does not automatically load it.
 
-- [vinext Documentation](https://github.com/cloudflare/vinext)
-- [Drizzle D1 Guide](https://orm.drizzle.team/docs/get-started/d1-new)
+`scripts/live-smoke.mjs` expects a PNG equation image at `/private/tmp/equation-smoke.png`. Provide that image, or update the script's image path for your environment, then run:
+
+```sh
+node scripts/live-smoke.mjs
+```
+
+This test makes real API requests and incurs charges. It reads the image, solves the recognized equation, and reports whether the separate check passed. It currently uses the default model.
+
+## Deployment
+
+The build generates an ES module Worker at `dist/server/index.js`, with a default `fetch(request, env)` export. Website assets are embedded in that module, so no separate asset service is required. The build also copies the hosting manifest to `dist/.openai/hosting.json`.
+
+The current website is published through Sites. Use its source synchronization, packaging, and deployment workflow, retaining the existing project ID for updates. Building locally does not publish the website. A separate deployment should use its own hosting configuration and supply the runtime secrets above.
+
+## Privacy and access
+
+- An uploaded image is previewed locally until you click **Read equation from image**; that action sends it to OpenAI.
+- Image URL previews contact the image host. Recognition also sends the URL to OpenAI.
+- The app does not persist photos or solutions in a database. API requests use `store: false`; provider data handling still applies.
+- `.env.local`, generated output, and local runtime state are excluded from Git.
+- Private access is enforced by Sites. The Worker has no standalone authentication or rate-limiting layer; add those before hosting it as an unrestricted public service.
+
+## Troubleshooting
+
+| Issue | What to do |
+| --- | --- |
+| API credits unavailable | Add credits to the API organization that owns the key. |
+| AI connection needs a renewed key | Check whether the runtime key expired or was revoked, then replace the server secret. |
+| Request limit reached | Wait and retry; check the project's API limits. |
+| Image cannot be read | Crop to one equation and use a sharper image, or upload the file instead of using a URL. |
+| Model review flags a problem | Review the transcription and solution; a successful model check is not a proof. |
+
+## References
+
+- [OpenAI image inputs](https://developers.openai.com/api/docs/guides/images-vision)
+- [API billing](https://platform.openai.com/settings/organization/billing)
+- [API usage](https://platform.openai.com/usage)
